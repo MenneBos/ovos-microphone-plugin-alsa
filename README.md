@@ -1,6 +1,6 @@
 ## Description
 
-OpenVoiceOS Microphone plugin
+OpenVoiceOS Microphone plugin with DC Offset and high pass filter for mems microphones
 
 
 ## Configuration
