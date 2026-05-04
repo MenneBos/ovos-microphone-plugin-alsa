@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from queue import Queue
 from threading import Thread
 from typing import Optional
+import numpy as np
 
 import alsaaudio
 from ovos_plugin_manager.templates.microphone import Microphone
@@ -48,6 +49,16 @@ class AlsaMicrophone(Microphone):
             return self._queue.get(timeout=self.timeout)
         except: # let the listener handle this, and maybe restart the plugin
             return None
+
+    def _preprocess_audio(self, chunk_bytes):
+        audio = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32)
+        # DC removal
+        audio -= np.mean(audio)
+        # snelle high-pass (vectorized)
+        audio = np.diff(audio, prepend=audio[0]) * 0.97
+        # clamp
+        audio = np.clip(audio, -32768, 32767).astype(np.int16)
+        return audio.tobytes()
 
     def stop(self):
         self._is_running = False
@@ -95,6 +106,9 @@ class AlsaMicrophone(Microphone):
                                 LOG.warning("Bad chunk length: %s", mic_chunk_length)
                                 continue
 
+                            # >>> PLAATS DEZE REGEL DIRECT NA mic.read()
+                            mic_chunk = self._preprocess_audio(mic_chunk)
+                            
                             # Increase loudness of audio
                             if self.multiplier != 1.0:
                                 mic_chunk = audioop.mul(
