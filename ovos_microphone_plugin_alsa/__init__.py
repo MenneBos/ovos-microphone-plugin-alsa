@@ -125,7 +125,7 @@ class AlsaMicrophone(Microphone):
                                 )
                                                         
                             # Schrijf de bewerkte bytes weg naar het debug-bestand
-                            debug_file.write(mic_chunk)  # used to write data to file fo testing audio quality
+                            debug_file.writeframes(mic_chunk)  # used to write data to file fo testing audio quality
                             
                             full_chunk += mic_chunk
                             while len(full_chunk) >= self.chunk_size:
