@@ -74,7 +74,7 @@ class AlsaMicrophone(Microphone):
     def _run(self):
         # Debug: open een bestand om de bewerkte audio in op te slaan
         debug_file_path = "/tmp/debug_mic.wav"  # used to write data to file fo testing audio quality
-        debug_file = open(debug_file_path, "wb")  # used to write data to file fo testing audio quality
+        debug_file = wave.open(debug_file_path, "wb")  # used to write data to file fo testing audio quality
         debug_file.setnchannels(self.sample_channels)  # used to write data to file fo testing audio quality
         debug_file.setsampwidth(self.sample_width)  # used to write data to file fo testing audio quality
         debug_file.setframerate(self.sample_rate)  # used to write data to file fo testing audio quality
