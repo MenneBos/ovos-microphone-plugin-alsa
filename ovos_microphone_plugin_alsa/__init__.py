@@ -19,6 +19,8 @@ from queue import Queue
 from threading import Thread
 from typing import Optional
 import numpy as np
+import os   # used to write data to file fo testing audio quality
+import wave  # used to write data to file fo testing audio quality
 
 import alsaaudio
 from ovos_plugin_manager.templates.microphone import Microphone
@@ -70,6 +72,13 @@ class AlsaMicrophone(Microphone):
             self._thread = None
 
     def _run(self):
+        # Debug: open een bestand om de bewerkte audio in op te slaan
+        debug_file_path = "/tmp/debug_mic.wav"  # used to write data to file fo testing audio quality
+        debug_file = open(debug_file_path, "wb")  # used to write data to file fo testing audio quality
+        debug_file.setnchannels(self.sample_channels)  # used to write data to file fo testing audio quality
+        debug_file.setsampwidth(self.sample_width)  # used to write data to file fo testing audio quality
+        debug_file.setframerate(self.sample_rate)  # used to write data to file fo testing audio quality
+        
         try:
             assert self.sample_width in {
                 2,
@@ -114,7 +123,10 @@ class AlsaMicrophone(Microphone):
                                 mic_chunk = audioop.mul(
                                     mic_chunk, self.sample_width, self.multiplier
                                 )
-
+                                                        
+                            # Schrijf de bewerkte bytes weg naar het debug-bestand
+                            debug_file.write(mic_chunk)  # used to write data to file fo testing audio quality
+                            
                             full_chunk += mic_chunk
                             while len(full_chunk) >= self.chunk_size:
                                 self._queue.put_nowait(full_chunk[: self.chunk_size])
@@ -122,6 +134,8 @@ class AlsaMicrophone(Microphone):
 
                             time.sleep(0.0)
                     finally:
+                        debug_file.close()  # used to write data to file fo testing audio quality
+                        LOG.info(f"Debug opname opgeslagen in {debug_file_path}")   # used to write data to file fo testing audio quality
                         mic.close()
                 except Exception:
                     LOG.exception("Failed to open microphone")
