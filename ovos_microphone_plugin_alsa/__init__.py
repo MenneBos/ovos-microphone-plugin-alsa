@@ -46,7 +46,7 @@ class AlsaMicrophone(Microphone):
         self._prev_sample = 0.0  # Voor high-pass context
         self.sample_width = 2
         self.sample_channels = 1
-        self.input_sample_rate = 48000
+        self.input_sample_rate = 16000
         self.sample_rate = 16000
         self._remainder = np.array([], dtype=np.float32) # Voor RNNoise context
         self._queue = Queue()
