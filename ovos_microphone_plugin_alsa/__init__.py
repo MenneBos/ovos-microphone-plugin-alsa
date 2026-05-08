@@ -108,13 +108,16 @@ class AlsaMicrophone(Microphone):
 
                     try:
                         full_chunk = bytes()
+                        LOG.info(f"PCM dump: {mic.dumpinfo()}")
 
                         while self._is_running:
                             mic_chunk_length, mic_chunk = mic.read()
                             if mic_chunk_length <= 0:
                                 LOG.warning("Bad chunk length: %s", mic_chunk_length)
                                 continue
-
+                            LOG.info ("Chunk length: %s", mic_chunk_length)    
+                            LOG.info(f"Chunk bytes: {len(mic_chunk)}")
+                            
                             # >>> PLAATS DEZE REGEL DIRECT NA mic.read()
                             mic_chunk = self._preprocess_audio(mic_chunk)
                             
