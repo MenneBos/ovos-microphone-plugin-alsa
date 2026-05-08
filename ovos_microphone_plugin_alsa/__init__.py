@@ -66,7 +66,6 @@ class AlsaMicrophone(Microphone):
 
     def _preprocess_audio(self, chunk_bytes):
         audio = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32)
-        audio /= 32768.0
         # DC removal
         audio -= np.mean(audio)
         # snelle high-pass (vectorized)
@@ -87,7 +86,7 @@ class AlsaMicrophone(Microphone):
 
         audio = np.concatenate(frames_out)
         # TERUGSCHALEN: Van float naar Int16 bereik
-        audio = np.clip(audio * 32767.0, -32768, 32767).astype(np.int16)
+        audio = np.clip(audio, -32768, 32767).astype(np.int16)
         return audio.tobytes()
 
 
