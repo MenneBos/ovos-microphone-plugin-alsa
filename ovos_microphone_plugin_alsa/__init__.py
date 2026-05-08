@@ -69,52 +69,22 @@ class AlsaMicrophone(Microphone):
             audio[1:] - 0.97 * audio[:-1]
         )
         #audio = np.diff(audio, prepend=audio[0]) * 0.97
-        
-        # clamp
-        audio = np.clip(audio, -32768, 32767)  #.astype(np.int16)
 
-        # -----------------------------
-        # RNNoise
-        # RNNoise werkt op frames van 480 samples @48k
-        # (= 10 ms)
-        # -----------------------------
-        denoiser = self._rnnoise
-
-        output_frames = []
-
-        frame_size = 480
-
-        for i in range(0, len(audio), frame_size):
-
-            frame = audio[i:i + frame_size]
-
-            if len(frame) < frame_size:
-                break
-
-            # float32 vereist
-            frame = frame.astype(np.float32)
-
-            processed = denoiser.process_frame(frame)
-
-            output_frames.append(processed)
-
-        if not output_frames:
+        # 4. RNNoise & Downsampling
+        # denoise_chunk splitst de data automatisch in 480-sample frames
+        frames_out = []
+        for vad, denoised in self.denoiser.denoise_chunk(audio):
+            # Downsample direct naar 16k (elke 3e sample)
+            frames_out.append(denoised[::3])
+        if not frames_out:
             return None
 
-        audio = np.concatenate(output_frames)
+        audio = np.concatenate(frames_out)
 
-        # -----------------------------
-        # 48k -> 16k downsample
-        # simpele decimation
-        # -----------------------------
-        audio = audio[::3]
-
-        # -----------------------------
+        # -------------------------
         # back to int16
-        # -----------------------------
-        audio = np.clip(audio, -32768, 32767)
-        audio = audio.astype(np.int16)
-       
+        # -------------------------
+        audio = np.clip(audio, -32768, 32767).astype(np.int16)
         return audio.tobytes()
 
     def stop(self):
