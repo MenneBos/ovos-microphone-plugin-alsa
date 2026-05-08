@@ -42,7 +42,7 @@ class AlsaMicrophone(Microphone):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.rnnoise = RNNoise(sample_rate=16000)
+        self.denoiser = RNNoise(sample_rate=16000)
         self._prev_sample = 0.0  # Voor high-pass context
         self.sample_width = 2
         self.sample_channels = 1
@@ -65,23 +65,37 @@ class AlsaMicrophone(Microphone):
             return None
 
     def _preprocess_audio(self, chunk_bytes):
-        # int16 -> float32
-        audio = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32)
+        audio_data = np.frombuffer(chunk_bytes, dtype=np.int16)
+    
+        audio = audio_data.astype(np.float32)
     
         # DC removal
         audio -= np.mean(audio)
     
-        # high-pass filter (stateful via prev sample)
+        # high-pass filter
         audio = np.diff(audio, prepend=self._prev_sample) * 0.97
         self._prev_sample = float(audio[-1])
     
-        # float -> int16 (NO clamp as requested)
         audio_int16 = audio.astype(np.int16)
     
-        # RNNoise (16kHz)
-        audio_int16 = self.rnnoise.process_audio(audio_int16)
+        # ============================
+        # RNNoise streaming chunk API
+        # ============================
+        denoised_output = []
     
-        return audio_int16.tobytes()
+        for speech_prob, denoised_audio in self.denoiser.denoise_chunk(audio_int16):
+            LOG.debug(f"Speech probability: {speech_prob}")
+    
+            # je kunt hier later VAD gating doen
+            denoised_output.append(denoised_audio)
+    
+        if not denoised_output:
+            return b""
+    
+        # flatten chunks
+        denoised_audio = np.concatenate(denoised_output)
+    
+        return denoised_audio.astype(np.int16).tobytes()
 
 
     def stop(self):
