@@ -21,7 +21,7 @@ from typing import Optional
 import numpy as np
 import os   # used to write data to file fo testing audio quality
 import wave  # used to write data to file fo testing audio quality
-from pyrnnoise import rnnoise
+from pyrnnoise import RNNoise
 
 import alsaaudio
 from ovos_plugin_manager.templates.microphone import Microphone
@@ -42,7 +42,7 @@ class AlsaMicrophone(Microphone):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.denoiser = rnnoise(sample_rate=48000)
+        self.denoiser = RNNoise(sample_rate=48000)
         self._prev_sample = 0.0  # Voor high-pass context
         self._remainder = np.array([], dtype=np.float32) # Voor RNNoise context
 
