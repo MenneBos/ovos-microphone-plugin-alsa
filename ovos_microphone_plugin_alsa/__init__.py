@@ -73,25 +73,23 @@ class AlsaMicrophone(Microphone):
         audio -= np.mean(audio)
 
         # snelle high-pass (vectorized)
-        audio = np.diff(audio, prepend=audio[0]) * 0.97
+        #audio = np.diff(audio, prepend=audio[0]) * 0.97
         
-        audio /= 32768
+        #audio /= 32768
     
         # high-pass filter
         #audio = np.diff(audio, prepend=self._prev_sample) * 0.97
         #self._prev_sample = float(audio[-1])
     
-        #audio = audio.astype(np.int16)
+        audio = audio.astype(np.int16)
+        audio = np.expand_dims(audio, axis=0)  # (1, N)
     
         # ============================
-        # RNNoise streaming chunk API
+        # denoised streaming chunk API
         # ============================
         denoised_output = []
     
-        for speech_prob, denoised_audio in self.denoiser.denoise_chunk(audio):
-            LOG.debug(f"Speech probability: {speech_prob}")
-    
-            # je kunt hier later VAD gating doen
+        for denoised_audio in self.denoiser.denoise_chunk(audio):
             denoised_output.append(denoised_audio)
     
         if not denoised_output:
