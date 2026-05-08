@@ -186,7 +186,8 @@ class AlsaMicrophone(Microphone):
 
                         while self._is_running:
                             mic_chunk_length, mic_chunk = mic.read()
-
+                            LOG.info("De loop is begonnen")
+                            
                             if mic_chunk_length <= 0:
                                 LOG.warning("Bad chunk length: %s", mic_chunk_length)
                                 continue
@@ -201,14 +202,7 @@ class AlsaMicrophone(Microphone):
                             if self.multiplier != 1.0:
                                 mic_chunk = audioop.mul(
                                     mic_chunk, 2, self.multiplier
-                                )
-                            
-                            # Voeg dit toe in je loop voor debuggen
-                            if len(mic_chunk) % 2 != 0:
-                                LOG.error("CRITICAL: Oneven aantal bytes! Audio corruptie gegarandeerd.")                    
-                            # Schrijf de bewerkte bytes weg naar het debug-bestand
-                            debug_file.writeframes(mic_chunk)  # used to write data to file fo testing audio quality
-                            
+                                )                           
                            
                             full_chunk += mic_chunk
                             while len(full_chunk) >= self.chunk_size:
