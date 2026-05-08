@@ -79,7 +79,7 @@ class AlsaMicrophone(Microphone):
         audio_int16 = audio.astype(np.int16)
     
         # RNNoise (16kHz)
-        audio_int16 = self.rnnoise.process_frame(audio_int16)
+        audio_int16 = self.rnnoise.process_audio(audio_int16)
     
         return audio_int16.tobytes()
 
