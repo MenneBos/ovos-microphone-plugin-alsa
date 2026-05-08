@@ -75,8 +75,7 @@ class AlsaMicrophone(Microphone):
         )
 
         # 3. Terugzetten naar int16 VOOR de denoiser
-        # Gebruik clip om 'clipping' artifacts te voorkomen
-        audio = np.clip(audio, -32768, 32767).astype(np.int16)
+        audio = np.frombuffer(chunk_bytes, dtype=np.int16)
         # 4. RNNoise verwacht meestal [channels, samples]
         # Zorg dat de vorm (1, 480) is voor een standaard RNNoise frame
         audio = audio.reshape(1, -1)
@@ -186,14 +185,14 @@ class AlsaMicrophone(Microphone):
 
                         while self._is_running:
                             mic_chunk_length, mic_chunk = mic.read()
-                            LOG.info("Chunk length: %s", mic_chunk_length)
+
                             if mic_chunk_length <= 0:
                                 LOG.warning("Bad chunk length: %s", mic_chunk_length)
                                 continue
                             
                             # >>> PLAATS DEZE REGEL DIRECT NA mic.read()
                             mic_chunk = self._preprocess_audio(mic_chunk)
-
+                            LOG.info("Chunk length in samples na RNNoise: %s", len(mic_chunk)/2)
                             if mic_chunk is None:
                                 continue
                             
@@ -208,6 +207,9 @@ class AlsaMicrophone(Microphone):
                                 LOG.error("CRITICAL: Oneven aantal bytes! Audio corruptie gegarandeerd.")                    
                             # Schrijf de bewerkte bytes weg naar het debug-bestand
                             debug_file.writeframes(mic_chunk)  # used to write data to file fo testing audio quality
+                            
+                            LOG.info("chunk_size type=%s", type(self.chunk_size))
+                            LOG.info("chunk_size value=%s", self.chunk_size)
                             
                             full_chunk += mic_chunk
                             while len(full_chunk) >= self.chunk_size:
