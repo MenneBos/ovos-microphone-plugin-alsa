@@ -162,7 +162,6 @@ class AlsaMicrophone(Microphone):
 
                             if mic_chunk is None:
                                 continue
-                            LOG.info("De preprocess_audio is geweest")
                             
                             # Increase loudness of audio
                             if self.multiplier != 1.0:
