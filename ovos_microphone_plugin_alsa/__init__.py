@@ -166,13 +166,13 @@ class AlsaMicrophone(Microphone):
                                 self._queue.put_nowait(full_chunk[: self.chunk_size])
                                 full_chunk = full_chunk[self.chunk_size:]
 
-                            time.sleep(0.0)
+                            time.sleep(0.001)
                     finally:
                         debug_file.close()  # used to write data to file fo testing audio quality
                         LOG.info(f"Debug opname opgeslagen in {debug_file_path}")   # used to write data to file fo testing audio quality
                         mic.close()
                 except Exception:
                     LOG.exception("Failed to open microphone")
-                    time.sleep(self.audio_retry_delay)
+                    time.sleep(0.001)
         except Exception:
             LOG.exception("Unexpected error in ALSA microphone thread")
