@@ -65,47 +65,44 @@ class AlsaMicrophone(Microphone):
             return None
 
     def _preprocess_audio(self, chunk_bytes):
-        audio = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32)
-        # DC removal
-        audio -= np.mean(audio)
-        # snelle high-pass (vectorized)
-        audio = np.append(
-            audio[0],
-            audio[1:] - 0.97 * audio[:-1]
-        )
 
-        # 3. Terugzetten naar int16 VOOR de denoiser
-        audio = np.frombuffer(chunk_bytes, dtype=np.int16)
-        # 4. RNNoise verwacht meestal [channels, samples]
-        # Zorg dat de vorm (1, 480) is voor een standaard RNNoise frame
-        audio = audio.reshape(1, -1)
-        # audio = np.frombuffer(chunk_bytes, dtype=np.int16)
-     
-        frames_out = []
+        # int16 → float32
+        audio = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32)
     
-        for vad, denoised in self.denoiser.denoise_chunk(audio):
+        # normalize (BELANGRIJK)
+        #audio /= 32768.0
     
-            # proper resampling
-            from scipy.signal import resample_poly
+        # DC removal (lightweight)
+        audio -= np.mean(audio)
     
-            down = resample_poly(
-                denoised,
-                up=1,
-                down=3,
-                axis=1
-            )
+        # optional: NO high-pass (belangrijk)
+        # audio = skip this
     
-            frames_out.append(down)
+        # RNNoise (streaming mode)
+        frames = []
     
-        if not frames_out:
+        frame_size = 160  # 10ms @ 16kHz
+    
+        for i in range(0, len(audio) - frame_size, frame_size):
+            frame = audio[i:i+frame_size]
+    
+            for vad, clean in self.denoiser.denoise_chunk(frame):
+                frames.append(clean)
+    
+        if not frames:
             return None
     
-        audio = np.concatenate(frames_out, axis=1)
+        audio = np.concatenate(frames)
     
-        # flatten mono
-        audio = audio.flatten()
+        # gain AFTER denoise
+        #audio *= self.multiplier
     
-        #return audio.astype(np.int16).tobytes()
+        # clamp
+        #audio = np.clip(audio, -1.0, 1.0)
+    
+        # back to int16
+        audio = (audio * 32767).astype(np.int16)
+    
         return audio.tobytes()
     
     #def _preprocess_audio(self, chunk_bytes):
