@@ -21,6 +21,7 @@ from typing import Optional
 import numpy as np
 import os   # used to write data to file fo testing audio quality
 import wave  # used to write data to file fo testing audio quality
+import rnnoise
 
 import alsaaudio
 from ovos_plugin_manager.templates.microphone import Microphone
@@ -38,6 +39,12 @@ class AlsaMicrophone(Microphone):
     _thread: Optional[Thread] = None
     _queue: "Queue[Optional[bytes]]" = field(default_factory=Queue)
     _is_running: bool = False
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._rnnoise = rnnoise.RNNoise()
+        self._prev_sample = 0.0  # Voor high-pass context
+        self._remainder = np.array([], dtype=np.float32) # Voor RNNoise context
 
     def start(self):
         assert self._thread is None, "Already started"
@@ -57,9 +64,57 @@ class AlsaMicrophone(Microphone):
         # DC removal
         audio -= np.mean(audio)
         # snelle high-pass (vectorized)
-        audio = np.diff(audio, prepend=audio[0]) * 0.97
+        audio = np.append(
+            audio[0],
+            audio[1:] - 0.97 * audio[:-1]
+        )
+        #audio = np.diff(audio, prepend=audio[0]) * 0.97
+        
         # clamp
-        audio = np.clip(audio, -32768, 32767).astype(np.int16)
+        audio = np.clip(audio, -32768, 32767)  #.astype(np.int16)
+
+        # -----------------------------
+        # RNNoise
+        # RNNoise werkt op frames van 480 samples @48k
+        # (= 10 ms)
+        # -----------------------------
+        denoiser = self._rnnoise
+
+        output_frames = []
+
+        frame_size = 480
+
+        for i in range(0, len(audio), frame_size):
+
+            frame = audio[i:i + frame_size]
+
+            if len(frame) < frame_size:
+                break
+
+            # float32 vereist
+            frame = frame.astype(np.float32)
+
+            processed = denoiser.process_frame(frame)
+
+            output_frames.append(processed)
+
+        if not output_frames:
+            return None
+
+        audio = np.concatenate(output_frames)
+
+        # -----------------------------
+        # 48k -> 16k downsample
+        # simpele decimation
+        # -----------------------------
+        audio = audio[::3]
+
+        # -----------------------------
+        # back to int16
+        # -----------------------------
+        audio = np.clip(audio, -32768, 32767)
+        audio = audio.astype(np.int16)
+       
         return audio.tobytes()
 
     def stop(self):
@@ -77,7 +132,11 @@ class AlsaMicrophone(Microphone):
         debug_file = wave.open(debug_file_path, "wb")  # used to write data to file fo testing audio quality
         debug_file.setnchannels(self.sample_channels)  # used to write data to file fo testing audio quality
         debug_file.setsampwidth(self.sample_width)  # used to write data to file fo testing audio quality
-        debug_file.setframerate(self.sample_rate)  # used to write data to file fo testing audio quality
+        debug_file.setframerate(self.48000)  # used to write data to file fo testing audio quality
+        # -----------------------------------------
+        # RNNoise instance
+        # -----------------------------------------
+        self._rnnoise = rnnoise.RNNoise()
         
         try:
             assert self.sample_width in {
@@ -97,13 +156,14 @@ class AlsaMicrophone(Microphone):
 
                     mic = alsaaudio.PCM(
                         type=alsaaudio.PCM_CAPTURE,
-                        rate=self.sample_rate,
-                        channels=self.sample_channels,
+                        rate=48000,
+                        channels=1,
                         format=alsaaudio.PCM_FORMAT_S32_LE
                         if self.sample_width == 4
                         else alsaaudio.PCM_FORMAT_S16_LE,
                         device=self.device,
-                        periodsize=self.period_size,
+                        # 480 samples = 10ms @48k
+                        periodsize=480,
                     )
 
                     try:
@@ -115,11 +175,11 @@ class AlsaMicrophone(Microphone):
                             if mic_chunk_length <= 0:
                                 LOG.warning("Bad chunk length: %s", mic_chunk_length)
                                 continue
-                            LOG.info ("Chunk length: %s", mic_chunk_length)    
-                            LOG.info(f"Chunk bytes: {len(mic_chunk)}")
                             
                             # >>> PLAATS DEZE REGEL DIRECT NA mic.read()
                             mic_chunk = self._preprocess_audio(mic_chunk)
+
+
                             
                             # Increase loudness of audio
                             if self.multiplier != 1.0:
