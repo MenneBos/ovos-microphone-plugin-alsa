@@ -110,7 +110,7 @@ class AlsaMicrophone(Microphone):
         # -----------------------------------------
         # RNNoise instance
         # -----------------------------------------
-        self.denoiser = RNNoise(self.sample_rate)
+        self.denoiser = RNNoise(self.input_sample_rate)
         
         try:
             assert self.sample_width in {
