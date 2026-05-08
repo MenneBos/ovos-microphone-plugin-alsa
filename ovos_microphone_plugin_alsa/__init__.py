@@ -192,7 +192,7 @@ class AlsaMicrophone(Microphone):
                             
                             # >>> PLAATS DEZE REGEL DIRECT NA mic.read()
                             mic_chunk = self._preprocess_audio(mic_chunk)
-                            LOG.info("Chunk length in samples na RNNoise: %s", len(mic_chunk)/2)
+
                             if mic_chunk is None:
                                 continue
                             
@@ -208,9 +208,7 @@ class AlsaMicrophone(Microphone):
                             # Schrijf de bewerkte bytes weg naar het debug-bestand
                             debug_file.writeframes(mic_chunk)  # used to write data to file fo testing audio quality
                             
-                            LOG.info("chunk_size type=%s", type(self.chunk_size))
-                            LOG.info("chunk_size value=%s", self.chunk_size)
-                            
+                           
                             full_chunk += mic_chunk
                             while len(full_chunk) >= self.chunk_size:
                                 self._queue.put_nowait(full_chunk[: self.chunk_size])
