@@ -105,7 +105,8 @@ class AlsaMicrophone(Microphone):
         # flatten mono
         audio = audio.flatten()
     
-        return audio.astype(np.int16).tobytes()
+        #return audio.astype(np.int16).tobytes()
+        return audio.tobytes()
     
     #def _preprocess_audio(self, chunk_bytes):
     #    audio = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32)
