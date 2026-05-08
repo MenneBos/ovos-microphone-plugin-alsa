@@ -157,7 +157,10 @@ class AlsaMicrophone(Microphone):
                                 mic_chunk = audioop.mul(
                                     mic_chunk, 2, self.multiplier
                                 )
-                                                        
+                            
+                            # Voeg dit toe in je loop voor debuggen
+                            if len(mic_chunk) % 2 != 0:
+                                LOG.error("CRITICAL: Oneven aantal bytes! Audio corruptie gegarandeerd.")                    
                             # Schrijf de bewerkte bytes weg naar het debug-bestand
                             debug_file.writeframes(mic_chunk)  # used to write data to file fo testing audio quality
                             
