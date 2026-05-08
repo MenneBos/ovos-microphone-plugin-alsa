@@ -73,6 +73,10 @@ class AlsaMicrophone(Microphone):
             audio[0],
             audio[1:] - 0.97 * audio[:-1]
         )
+
+        # 3. Terugzetten naar int16 VOOR de denoiser
+        # Gebruik clip om 'clipping' artifacts te voorkomen
+        audio = np.clip(audio, -32768, 32767).astype(np.int16)
         # 4. RNNoise verwacht meestal [channels, samples]
         # Zorg dat de vorm (1, 480) is voor een standaard RNNoise frame
         audio = audio.reshape(1, -1)
@@ -182,6 +186,7 @@ class AlsaMicrophone(Microphone):
 
                         while self._is_running:
                             mic_chunk_length, mic_chunk = mic.read()
+                            LOG.info("Chunk length: %s", mic_chunk_length)
                             if mic_chunk_length <= 0:
                                 LOG.warning("Bad chunk length: %s", mic_chunk_length)
                                 continue
