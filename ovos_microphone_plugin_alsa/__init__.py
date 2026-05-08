@@ -82,7 +82,8 @@ class AlsaMicrophone(Microphone):
             return None
 
         audio = np.concatenate(frames_out)
-        audio = np.clip(audio, -1.0, 1.0)
+        # TERUGSCHALEN: Van float naar Int16 bereik
+        audio = np.clip(audio * 32767.0, -32768, 32767).astype(np.int16)
         return audio.tobytes()
 
 
