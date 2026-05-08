@@ -42,7 +42,7 @@ class AlsaMicrophone(Microphone):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._rnnoise = rnnoise.RNNoise()
+        self.denoiser = rnnoise(sample_rate=48000)
         self._prev_sample = 0.0  # Voor high-pass context
         self._remainder = np.array([], dtype=np.float32) # Voor RNNoise context
 
