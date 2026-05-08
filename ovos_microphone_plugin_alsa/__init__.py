@@ -65,7 +65,14 @@ class AlsaMicrophone(Microphone):
             return None
 
     def _preprocess_audio(self, chunk_bytes):
-    
+        audio = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32)
+        # DC removal
+        audio -= np.mean(audio)
+        # snelle high-pass (vectorized)
+        audio = np.append(
+            audio[0],
+            audio[1:] - 0.97 * audio[:-1]
+        )
         # int16 mono
         audio = np.frombuffer(chunk_bytes, dtype=np.int16)
     
