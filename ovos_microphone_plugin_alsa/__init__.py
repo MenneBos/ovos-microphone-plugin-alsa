@@ -102,7 +102,7 @@ class AlsaMicrophone(Microphone):
         debug_file = wave.open(debug_file_path, "wb")  # used to write data to file fo testing audio quality
         debug_file.setnchannels(self.sample_channels)  # used to write data to file fo testing audio quality
         debug_file.setsampwidth(self.sample_width)  # used to write data to file fo testing audio quality
-        debug_file.setframerate(self.48000)  # used to write data to file fo testing audio quality
+        debug_file.setframerate(self.sample_rate)  # used to write data to file fo testing audio quality
         # -----------------------------------------
         # RNNoise instance
         # -----------------------------------------
