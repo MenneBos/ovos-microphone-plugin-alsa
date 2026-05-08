@@ -69,10 +69,10 @@ class AlsaMicrophone(Microphone):
         # DC removal
         audio -= np.mean(audio)
         # snelle high-pass (vectorized)
-        audio = np.append(
-            audio[0],
-            audio[1:] - 0.97 * audio[:-1]
-        )
+        ##audio = np.append(
+        ##    audio[0],
+        ##    audio[1:] - 0.97 * audio[:-1]
+        ##)
 
         # 3. Terugzetten naar int16 VOOR de denoiser
         audio = np.frombuffer(chunk_bytes, dtype=np.int16)
