@@ -73,12 +73,11 @@ class AlsaMicrophone(Microphone):
             audio[0],
             audio[1:] - 0.97 * audio[:-1]
         )
-        # int16 mono
-        audio = np.frombuffer(chunk_bytes, dtype=np.int16)
-    
-        # [channels, samples]
+        # 4. RNNoise verwacht meestal [channels, samples]
+        # Zorg dat de vorm (1, 480) is voor een standaard RNNoise frame
         audio = audio.reshape(1, -1)
-    
+        # audio = np.frombuffer(chunk_bytes, dtype=np.int16)
+     
         frames_out = []
     
         for vad, denoised in self.denoiser.denoise_chunk(audio):
