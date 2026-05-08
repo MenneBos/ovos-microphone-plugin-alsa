@@ -42,7 +42,7 @@ class AlsaMicrophone(Microphone):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        #self.denoiser = RNNoise(sample_rate=48000)
+        self.denoiser = RNNoise(sample_rate=16000)
         self._prev_sample = 0.0  # Voor high-pass context
         self.sample_width = 2
         self.sample_channels = 1
@@ -65,71 +65,23 @@ class AlsaMicrophone(Microphone):
             return None
 
     def _preprocess_audio(self, chunk_bytes):
-
-        # int16 → float32
+        # int16 -> float32
         audio = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32)
     
-        # normalize (BELANGRIJK)
-        #audio /= 32768.0
-    
-        # DC removal (lightweight)
+        # DC removal
         audio -= np.mean(audio)
     
-        # optional: NO high-pass (belangrijk)
-        # audio = skip this
+        # high-pass filter (stateful via prev sample)
+        audio = np.diff(audio, prepend=self._prev_sample) * 0.97
+        self._prev_sample = float(audio[-1])
     
-        # RNNoise (streaming mode)
-        frames = []
+        # float -> int16 (NO clamp as requested)
+        audio_int16 = audio.astype(np.int16)
     
-        frame_size = 160  # 10ms @ 16kHz
+        # RNNoise (16kHz)
+        audio_int16 = self.rnnoise.process_frame(audio_int16)
     
-        for i in range(0, len(audio) - frame_size, frame_size):
-            frame = audio[i:i+frame_size]
-    
-            for vad, clean in self.denoiser.denoise_chunk(frame):
-                frames.append(clean)
-    
-        if not frames:
-            return None
-    
-        audio = np.concatenate(frames)
-    
-        # gain AFTER denoise
-        #audio *= self.multiplier
-    
-        # clamp
-        #audio = np.clip(audio, -1.0, 1.0)
-    
-        # back to int16
-        #audio = (audio * 32767).astype(np.int16)
-        return audio.astype(np.int16).tobytes()
-    
-        #return audio.tobytes()
-    
-    #def _preprocess_audio(self, chunk_bytes):
-    #    audio = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32)
-        # DC removal
-     #   audio -= np.mean(audio)
-        # snelle high-pass (vectorized)
-      #  audio = np.append(
-       #     audio[0],
-        #    audio[1:] - 0.97 * audio[:-1]
-        #)
-        #audio = np.diff(audio, prepend=audio[0]) * 0.97
-
-        # 4. RNNoise & Downsampling
-        # denoise_chunk splitst de data automatisch in 480-sample frames
-        #frames_out = []
-        #for vad, denoised in self.denoiser.denoise_chunk(audio):
-            # Downsample direct naar 16k (elke 3e sample)
-         #   frames_out.append(denoised[::3])
-        #if not frames_out:
-        #    return None
-
-        #audio = np.concatenate(frames_out)
-        # TERUGSCHALEN: Van float naar Int16 bereik
-        #audio = np.clip(audio, -32768, 32767).astype(np.int16)
-        #return audio.tobytes()
+        return audio_int16.tobytes()
 
 
     def stop(self):
@@ -176,15 +128,16 @@ class AlsaMicrophone(Microphone):
                         channels=self.sample_channels,
                         format=alsaaudio.PCM_FORMAT_S16_LE,
                         device=self.device,
-                        periodsize=480,
+                        periodsize=160,
                     )
+
 
                     try:
                         full_chunk = bytes()
 
                         while self._is_running:
                             mic_chunk_length, mic_chunk = mic.read()
-                            LOG.info("De loop is begonnen")
+
                             
                             if mic_chunk_length <= 0:
                                 LOG.warning("Bad chunk length: %s", mic_chunk_length)
@@ -195,6 +148,7 @@ class AlsaMicrophone(Microphone):
 
                             if mic_chunk is None:
                                 continue
+                            LOG.info("De preprocess_audio is geweest")
                             
                             # Increase loudness of audio
                             if self.multiplier != 1.0:
