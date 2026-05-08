@@ -45,6 +45,7 @@ class AlsaMicrophone(Microphone):
         #self.denoiser = RNNoise(sample_rate=48000)
         self._prev_sample = 0.0  # Voor high-pass context
         self._remainder = np.array([], dtype=np.float32) # Voor RNNoise context
+        self._queue = Queue()
 
     def start(self):
         assert self._thread is None, "Already started"
@@ -61,6 +62,7 @@ class AlsaMicrophone(Microphone):
 
     def _preprocess_audio(self, chunk_bytes):
         audio = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32)
+        audio /= 32768.0
         # DC removal
         audio -= np.mean(audio)
         # snelle high-pass (vectorized)
@@ -79,13 +81,10 @@ class AlsaMicrophone(Microphone):
         if not frames_out:
             return None
 
-        audio_16k = np.concatenate(frames_out)
+        audio = np.concatenate(frames_out)
+        audio = np.clip(audio, -1.0, 1.0)
+        return audio.tobytes()
 
-        # 5. Terugschalen naar Int16 bereik
-        audio_16k = (audio_16k * 32768.0)
-        audio_16k = np.clip(audio_16k, -32768, 32767).astype(np.int16)
-        
-        return audio_16k.tobytes()
 
     def stop(self):
         self._is_running = False
