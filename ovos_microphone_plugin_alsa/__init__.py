@@ -21,7 +21,7 @@ from typing import Optional
 import numpy as np
 import os   # used to write data to file fo testing audio quality
 import wave  # used to write data to file fo testing audio quality
-import rnnoise
+from pyrnnoise import rnnoise
 
 import alsaaudio
 from ovos_plugin_manager.templates.microphone import Microphone
