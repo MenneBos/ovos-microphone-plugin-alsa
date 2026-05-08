@@ -44,6 +44,9 @@ class AlsaMicrophone(Microphone):
         super().__init__(*args, **kwargs)
         #self.denoiser = RNNoise(sample_rate=48000)
         self._prev_sample = 0.0  # Voor high-pass context
+        self.sample_width = 2
+        self.sample_channels = 1
+        self.sample_rate = 48000
         self._remainder = np.array([], dtype=np.float32) # Voor RNNoise context
         self._queue = Queue()
 
@@ -107,7 +110,7 @@ class AlsaMicrophone(Microphone):
         # -----------------------------------------
         # RNNoise instance
         # -----------------------------------------
-        self.denoiser = RNNoise(sample_rate=48000)
+        self.denoiser = RNNoise(self.sample_rate)
         
         try:
             assert self.sample_width in {
