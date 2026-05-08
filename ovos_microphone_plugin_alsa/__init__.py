@@ -65,29 +65,63 @@ class AlsaMicrophone(Microphone):
             return None
 
     def _preprocess_audio(self, chunk_bytes):
-        audio = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32)
+    
+        # int16 mono
+        audio = np.frombuffer(chunk_bytes, dtype=np.int16)
+    
+        # [channels, samples]
+        audio = audio.reshape(1, -1)
+    
+        frames_out = []
+    
+        for vad, denoised in self.denoiser.denoise_chunk(audio):
+    
+            # proper resampling
+            from scipy.signal import resample_poly
+    
+            down = resample_poly(
+                denoised,
+                up=1,
+                down=3,
+                axis=1
+            )
+    
+            frames_out.append(down)
+    
+        if not frames_out:
+            return None
+    
+        audio = np.concatenate(frames_out, axis=1)
+    
+        # flatten mono
+        audio = audio.flatten()
+    
+        return audio.astype(np.int16).tobytes()
+    
+    #def _preprocess_audio(self, chunk_bytes):
+    #    audio = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32)
         # DC removal
-        audio -= np.mean(audio)
+     #   audio -= np.mean(audio)
         # snelle high-pass (vectorized)
-        audio = np.append(
-            audio[0],
-            audio[1:] - 0.97 * audio[:-1]
-        )
+      #  audio = np.append(
+       #     audio[0],
+        #    audio[1:] - 0.97 * audio[:-1]
+        #)
         #audio = np.diff(audio, prepend=audio[0]) * 0.97
 
         # 4. RNNoise & Downsampling
         # denoise_chunk splitst de data automatisch in 480-sample frames
-        frames_out = []
-        for vad, denoised in self.denoiser.denoise_chunk(audio):
+        #frames_out = []
+        #for vad, denoised in self.denoiser.denoise_chunk(audio):
             # Downsample direct naar 16k (elke 3e sample)
-            frames_out.append(denoised[::3])
-        if not frames_out:
-            return None
+         #   frames_out.append(denoised[::3])
+        #if not frames_out:
+        #    return None
 
-        audio = np.concatenate(frames_out)
+        #audio = np.concatenate(frames_out)
         # TERUGSCHALEN: Van float naar Int16 bereik
-        audio = np.clip(audio, -32768, 32767).astype(np.int16)
-        return audio.tobytes()
+        #audio = np.clip(audio, -32768, 32767).astype(np.int16)
+        #return audio.tobytes()
 
 
     def stop(self):
