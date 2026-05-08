@@ -79,13 +79,13 @@ class AlsaMicrophone(Microphone):
         if not frames_out:
             return None
 
-        audio = np.concatenate(frames_out)
+        audio_16k = np.concatenate(frames_out)
 
-        # -------------------------
-        # back to int16
-        # -------------------------
-        audio = np.clip(audio, -32768, 32767).astype(np.int16)
-        return audio.tobytes()
+        # 5. Terugschalen naar Int16 bereik
+        audio_16k = (audio_16k * 32768.0)
+        audio_16k = np.clip(audio_16k, -32768, 32767).astype(np.int16)
+        
+        return audio_16k.tobytes()
 
     def stop(self):
         self._is_running = False
@@ -150,12 +150,13 @@ class AlsaMicrophone(Microphone):
                             # >>> PLAATS DEZE REGEL DIRECT NA mic.read()
                             mic_chunk = self._preprocess_audio(mic_chunk)
 
-
+                            if mic_chunk is None:
+                                continue
                             
                             # Increase loudness of audio
                             if self.multiplier != 1.0:
                                 mic_chunk = audioop.mul(
-                                    mic_chunk, self.sample_width, self.multiplier
+                                    mic_chunk, 2, self.multiplier
                                 )
                                                         
                             # Schrijf de bewerkte bytes weg naar het debug-bestand
