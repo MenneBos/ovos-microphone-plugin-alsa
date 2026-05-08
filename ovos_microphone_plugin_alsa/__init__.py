@@ -71,6 +71,8 @@ class AlsaMicrophone(Microphone):
     
         # DC removal
         audio -= np.mean(audio)
+
+        audio /= 32768
     
         # high-pass filter
         #audio = np.diff(audio, prepend=self._prev_sample) * 0.97
