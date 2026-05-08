@@ -73,8 +73,8 @@ class AlsaMicrophone(Microphone):
         audio -= np.mean(audio)
     
         # high-pass filter
-        audio = np.diff(audio, prepend=self._prev_sample) * 0.97
-        self._prev_sample = float(audio[-1])
+        #audio = np.diff(audio, prepend=self._prev_sample) * 0.97
+        #self._prev_sample = float(audio[-1])
     
         audio_int16 = audio.astype(np.int16)
     
