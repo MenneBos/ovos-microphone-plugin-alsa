@@ -169,6 +169,9 @@ class AlsaMicrophone(Microphone):
                                 mic_chunk = audioop.mul(
                                     mic_chunk, 2, self.multiplier
                                 )                           
+
+                            # Schrijf de bewerkte bytes weg naar het debug-bestand
+                            debug_file.writeframes(mic_chunk)  # used to write data to file fo testing audio quality
                            
                             full_chunk += mic_chunk
                             while len(full_chunk) >= self.chunk_size:
