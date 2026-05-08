@@ -101,9 +101,10 @@ class AlsaMicrophone(Microphone):
         #audio = np.clip(audio, -1.0, 1.0)
     
         # back to int16
-        audio = (audio * 32767).astype(np.int16)
+        #audio = (audio * 32767).astype(np.int16)
+        return audio.astype(np.int16).tobytes()
     
-        return audio.tobytes()
+        #return audio.tobytes()
     
     #def _preprocess_audio(self, chunk_bytes):
     #    audio = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32)
