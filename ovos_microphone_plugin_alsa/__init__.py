@@ -46,7 +46,8 @@ class AlsaMicrophone(Microphone):
         self._prev_sample = 0.0  # Voor high-pass context
         self.sample_width = 2
         self.sample_channels = 1
-        self.sample_rate = 48000
+        self.input_sample_rate = 48000
+        self.sample_rate = 16000
         self._remainder = np.array([], dtype=np.float32) # Voor RNNoise context
         self._queue = Queue()
 
@@ -130,19 +131,15 @@ class AlsaMicrophone(Microphone):
 
                     mic = alsaaudio.PCM(
                         type=alsaaudio.PCM_CAPTURE,
-                        rate=48000,
-                        channels=1,
-                        format=alsaaudio.PCM_FORMAT_S32_LE
-                        if self.sample_width == 4
-                        else alsaaudio.PCM_FORMAT_S16_LE,
+                        rate=self.input_sample_rate,
+                        channels=self.sample_channels,
+                        format=alsaaudio.PCM_FORMAT_S16_LE,
                         device=self.device,
-                        # 480 samples = 10ms @48k
                         periodsize=480,
                     )
 
                     try:
                         full_chunk = bytes()
-                        LOG.info(f"PCM dump: {mic.dumpinfo()}")
 
                         while self._is_running:
                             mic_chunk_length, mic_chunk = mic.read()
