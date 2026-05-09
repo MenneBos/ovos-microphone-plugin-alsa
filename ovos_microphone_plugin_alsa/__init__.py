@@ -64,7 +64,7 @@ def _preprocess_worker(input_queue, output_queue, sample_rate, cpu_core):
                
                 if denoised_chunks:
                     denoised_audio = (
-                        np.concatenate(mixed)
+                        np.concatenate(denoised_chunks)
                         .astype(np.int16)
                         .tobytes()
                     )
