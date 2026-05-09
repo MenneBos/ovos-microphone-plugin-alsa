@@ -73,9 +73,9 @@ def _preprocess_worker(input_queue, output_queue, sample_rate, cpu_core):
                 
                 target_len = len(denoised_audio)
                 original_signal = audio[:target_len]
-                mixed = (0.5 * denoised_audio) + (0.5 * audio[:len(original_signal)])
+                denoised_audio = (0.5 * denoised_audio) + (0.5 * audio[:len(original_signal)])
                 
-                output_queue.put(mixed)
+                output_queue.put(denoised_audio)
                 
             except Exception:
                 LOG.exception("Failed to preprocess audio")
