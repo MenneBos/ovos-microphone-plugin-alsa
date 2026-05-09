@@ -14,216 +14,126 @@
 #
 import audioop
 import time
+import numpy as np
+import wave
 from dataclasses import dataclass, field
 from queue import Queue
 from threading import Thread
+from multiprocessing import Process, Queue as MPQueue
 from typing import Optional
-import numpy as np
-import os   # used to write data to file fo testing audio quality
-import wave  # used to write data to file fo testing audio quality
 from pyrnnoise import RNNoise
 
 import alsaaudio
 from ovos_plugin_manager.templates.microphone import Microphone
 from ovos_utils.log import LOG
 
-
 @dataclass
 class AlsaMicrophone(Microphone):
     device: str = "default"
-    period_size: int = 1024
+    period_size: int = 960  # Optimaal voor RNNoise (2 frames van 480)
     timeout: float = 5.0
     multiplier: float = 1.0
     audio_retries: int = 0
     audio_retry_delay: float = 0.0
     _thread: Optional[Thread] = None
-    _queue: "Queue[Optional[bytes]]" = field(default_factory=Queue)
+    _worker_process: Optional[Process] = None
     _is_running: bool = False
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.denoiser = RNNoise(sample_rate=16000)
-        self._prev_sample = 0.0  # Voor high-pass context
         self.sample_width = 2
         self.sample_channels = 1
-        self.input_sample_rate = 16000
         self.sample_rate = 16000
-        self._remainder = np.array([], dtype=np.float32) # Voor RNNoise context
-        self._queue = Queue()
+        self.input_sample_rate = 16000
+        
+        # Queues voor communicatie tussen processen
+        self._input_queue = MPQueue()  # Van Mic naar Denoiser
+        self._output_queue = Queue()   # Van Denoiser naar Listener (Queue.get)
 
     def start(self):
         assert self._thread is None, "Already started"
         self._is_running = True
+        
+        # 1. Start de Denoiser Worker in een apart PROCES (andere CPU kern)
+        self._worker_process = Process(target=self._denoise_worker, daemon=True)
+        self._worker_process.start()
+        
+        # 2. Start de Microphone Reader in een aparte THREAD
         self._thread = Thread(target=self._run, daemon=True)
         self._thread.start()
 
     def read_chunk(self) -> Optional[bytes]:
-        assert self._is_running, "Not running"
         try:
-            return self._queue.get(timeout=self.timeout)
-        except: # let the listener handle this, and maybe restart the plugin
+            return self._output_queue.get(timeout=self.timeout)
+        except:
             return None
 
-    def _preprocess_audio(self, chunk_bytes):
-        #audio = np.frombuffer(chunk_bytes, dtype=np.int16)
-        #audio = np.frombuffer(chunk_bytes, dtype=np.float32) / 32768.0
-
-        #audio = audio.astype(np.float32) / 32768.0
-    
-        # DC removal
-        #audio -= np.mean(audio)
-
-        # snelle high-pass (vectorized)
-        #audio = np.diff(audio, prepend=audio[0]) * 0.97
+    def _denoise_worker(self):
+        """ Draait op een aparte CPU kern. """
+        LOG.info("RNNoise worker process gestart.")
+        # Initialiseer RNNoise binnen het proces
+        denoiser = RNNoise(sample_rate=16000)
         
-        #audio /= 32768
-    
-        # high-pass filter
-        #audio = np.diff(audio, prepend=self._prev_sample) * 0.97
-        #self._prev_sample = float(audio[-1])
-    
-        #audio = audio.astype(np.int16)
-        audio = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-        #audio = np.expand_dims(audio, axis=0)  # (1, N)
-        # 2. Naar [1, N]
-        audio = audio.reshape(1, -1)
-    
-        # ============================
-        # denoised streaming chunk API
-        # ============================
-        denoised_chunks = []
-    
-        for speech_prob, denoised_frame in self.denoiser.denoise_chunk(audio):
-            #LOG.debug(f"Speech probability: {speech_prob}")
-            #denoised_frame = (denoised_frame * 32768.0) # output is float32 tussen 1 en -1
-            # normalize to 1D
-            #if denoised_audio.ndim == 2:
-            #    denoised_audio = denoised_audio[0]
+        while self._is_running:
+            try:
+                chunk_bytes = self._input_queue.get(timeout=1.0)
+                if chunk_bytes is None:
+                    break
+                
+                # Preprocessing
+                audio = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+                audio_input = audio.reshape(1, -1)
+                
+                denoised_chunks = []
+                for vad, frame in denoiser.denoise_chunk(audio_input):
+                    # Terugschalen naar int16 bereik en flatten naar 1D
+                    denoised_chunks.append((frame.flatten() * 32768.0))
+                
+                if denoised_chunks:
+                    combined = np.concatenate(denoised_chunks)
+                    # Clipping om overflow te voorkomen
+                    final_bytes = np.clip(combined, -32768, 32767).astype(np.int16).tobytes()
+                    self._output_queue.put(final_bytes)
+                    
+            except Exception:
+                continue
 
-            if denoised_frame.ndim > 1:
-                denoised_chunks.append(denoised_frame.flatten()) # zet om van [1.480] naar [480]
-    
-        # flatten chunks
-        denoised_audio = np.concatenate(denoised_chunks).astype(np.int16).tobytes()
-        #final_bytes = np.clip(denoised_audio, -32768, 32767).astype(np.int16).tobytes() # dit clipt met *32768.0
-        return denoised_audio
+    def _run(self):
+        """ Microfoon reader thread. """
+        try:
+            mic = alsaaudio.PCM(
+                type=alsaaudio.PCM_CAPTURE,
+                rate=self.input_sample_rate,
+                channels=self.sample_channels,
+                format=alsaaudio.PCM_FORMAT_S16_LE,
+                device=self.device,
+                periodsize=self.period_size
+            )
+            
+            full_chunk = bytes()
+            
+            while self._is_running:
+                length, mic_chunk = mic.read()
+                
+                if length > 0:
+                    # Pas multiplier toe (indien nodig) op ruwe data
+                    if self.multiplier != 1.0:
+                        mic_chunk = audioop.mul(mic_chunk, 2, self.multiplier)
+                    
+                    # Stuur naar de worker process via de input queue
+                    self._input_queue.put(mic_chunk)
+                    
+                time.sleep(0) # Yield naar andere threads
+                
+        except Exception:
+            LOG.exception("Fout in ALSA reader thread")
+        finally:
+            mic.close()
 
     def stop(self):
         self._is_running = False
-        while not self._queue.empty():
-            self._queue.get()
-        self._queue.put_nowait(None)
-        if self._thread is not None:
+        self._input_queue.put(None) # Stop de worker
+        if self._worker_process:
+            self._worker_process.join()
+        if self._thread:
             self._thread.join()
-            self._thread = None
-
-    def _run(self):
-        # Debug: open een bestand om de bewerkte audio in op te slaan
-        debug_file_path = "/tmp/debug_mic.wav"  # used to write data to file fo testing audio quality
-        debug_file = wave.open(debug_file_path, "wb")  # used to write data to file fo testing audio quality
-        debug_file.setnchannels(self.sample_channels)  # used to write data to file fo testing audio quality
-        debug_file.setsampwidth(self.sample_width)  # used to write data to file fo testing audio quality
-        debug_file.setframerate(self.sample_rate)  # used to write data to file fo testing audio quality
-       
-        try:
-            assert self.sample_width in {
-                2,
-                4,
-            }, "Only 16-bit and 32-bit sample widths are supported"
-
-            for _ in range(self.audio_retries + 1):
-                try:
-                    LOG.debug(
-                        "Opening microphone (device=%s, rate=%s, width=%s, channels=%s)",
-                        self.device,
-                        self.sample_rate,
-                        self.sample_width,
-                        self.sample_channels,
-                    )
-
-                    mic = alsaaudio.PCM(
-                        type=alsaaudio.PCM_CAPTURE,
-                        rate=self.input_sample_rate,
-                        channels=self.sample_channels,
-                        format=alsaaudio.PCM_FORMAT_S16_LE,
-                        device=self.device,
-                        periodsize=960,
-                    )
-
-
-                    try:
-                        full_chunk = bytes()
-
-                        # -----------------------------------------
-                        # Eenmalige debug-buffer van 10 seconden
-                        # -----------------------------------------
-                        debug_buffer = bytearray()
-                        
-                        bytes_per_second = (
-                            self.sample_rate *
-                            self.sample_width *
-                            self.sample_channels
-                        )
-                        
-                        max_buffer_size = bytes_per_second * 15  # 10 seconden audio
-                        
-                        debug_saved = False
-                        
-                        while self._is_running:
-                            mic_chunk_length, mic_chunk = mic.read()
-
-                            
-                            if mic_chunk_length <= 0:
-                                LOG.warning("Bad chunk length: %s", mic_chunk_length)
-                                continue
-                            
-                            # >>> PLAATS DEZE REGEL DIRECT NA mic.read()
-                            mic_chunk = self._preprocess_audio(mic_chunk)
-
-                            if mic_chunk is None:
-                                continue
-                            
-                            # Increase loudness of audio
-                            if self.multiplier != 1.0:
-                                mic_chunk = audioop.mul(
-                                    mic_chunk, 2, self.multiplier
-                                )                           
-
-                            # Schrijf de bewerkte bytes weg naar het debug-bestand
-                            #debug_file.writeframes(mic_chunk)  # used to write data to file fo testing audio quality
-                            # Verzamel exact 10 seconden audio
-                            if not debug_saved:
-                            
-                                debug_buffer.extend(mic_chunk)
-                            
-                                # Zodra buffer 10 seconden bevat
-                                if len(debug_buffer) >= max_buffer_size:
-                            
-                                    debug_file.writeframes(bytes(debug_buffer))
-                                    #debug_file.flush()
-                            
-                                    LOG.info(
-                                        "Debug opname van 10 seconden opgeslagen: %s",
-                                        debug_file_path
-                                    )
-                            
-                                    debug_saved = True
-                            
-                                    # buffer leegmaken
-                                    debug_buffer.clear()
-                           
-                            full_chunk += mic_chunk
-                            while len(full_chunk) >= self.chunk_size:
-                                self._queue.put_nowait(full_chunk[: self.chunk_size])
-                                full_chunk = full_chunk[self.chunk_size:]
-
-                            time.sleep(0.001)
-                    finally:
-                        debug_file.close()  # used to write data to file fo testing audio quality
-                        LOG.info(f"Debug opname opgeslagen in {debug_file_path}")   # used to write data to file fo testing audio quality
-                        mic.close()
-                except Exception:
-                    LOG.exception("Failed to open microphone")
-                    time.sleep(0.001)
-        except Exception:
-            LOG.exception("Unexpected error in ALSA microphone thread")
