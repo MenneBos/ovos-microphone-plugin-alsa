@@ -65,10 +65,10 @@ class AlsaMicrophone(Microphone):
             return None
 
     def _preprocess_audio(self, chunk_bytes):
-        #audio = np.frombuffer(chunk_bytes, dtype=np.int16)
-        audio = np.frombuffer(chunk_bytes, dtype=np.float32) / 32768.0
+        audio = np.frombuffer(chunk_bytes, dtype=np.int16)
+        #audio = np.frombuffer(chunk_bytes, dtype=np.float32) / 32768.0
 
-        #audio = audio.astype(np.float32) / 32768.0
+        audio = audio.astype(np.float32) / 32768.0
     
         # DC removal
         #audio -= np.mean(audio)
@@ -103,7 +103,7 @@ class AlsaMicrophone(Microphone):
             return b""
     
         # flatten chunks
-        denoised_audio = np.concatenate(denoised_output)
+        #denoised_audio = np.concatenate(denoised_output)
     
         return denoised_audio.astype(np.int16).tobytes()
 
