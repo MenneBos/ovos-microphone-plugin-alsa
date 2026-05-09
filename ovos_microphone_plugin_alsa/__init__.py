@@ -13,127 +13,256 @@
 # limitations under the License.
 #
 import audioop
+import os
 import time
-import numpy as np
 import wave
 from dataclasses import dataclass, field
-from queue import Queue
-from threading import Thread
 from multiprocessing import Process, Queue as MPQueue
+from queue import Empty, Queue
+from threading import Thread
 from typing import Optional
+
+import numpy as np
 from pyrnnoise import RNNoise
 
 import alsaaudio
 from ovos_plugin_manager.templates.microphone import Microphone
 from ovos_utils.log import LOG
 
+
+def _preprocess_worker(input_queue, output_queue, sample_rate, cpu_core):
+    try:
+        try:
+            os.sched_setaffinity(0, {cpu_core})
+            LOG.info("Preprocess worker pinned to CPU core %s", cpu_core)
+        except AttributeError:
+            LOG.warning("CPU affinity is not supported on this platform")
+        except Exception:
+            LOG.exception("Failed to pin preprocess worker to CPU core %s", cpu_core)
+
+        denoiser = RNNoise(sample_rate=sample_rate)
+
+        while True:
+            chunk_bytes = input_queue.get()
+            if chunk_bytes is None:
+                output_queue.put(None)
+                break
+
+            try:
+                audio = (
+                    np.frombuffer(chunk_bytes, dtype=np.int16)
+                    .astype(np.float32) / 32768.0
+                )
+                audio = audio.reshape(1, -1)
+
+                denoised_chunks = []
+
+                for speech_prob, denoised_frame in denoiser.denoise_chunk(audio):
+                    if denoised_frame.ndim > 1:
+                        denoised_chunks.append(denoised_frame.flatten())
+
+                if denoised_chunks:
+                    denoised_audio = (
+                        np.concatenate(denoised_chunks)
+                        .astype(np.int16)
+                        .tobytes()
+                    )
+                else:
+                    denoised_audio = b""
+
+                output_queue.put(denoised_audio)
+            except Exception:
+                LOG.exception("Failed to preprocess audio")
+                output_queue.put(None)
+    except Exception:
+        LOG.exception("Unexpected error in preprocess worker")
+        try:
+            output_queue.put(None)
+        except Exception:
+            pass
+
+
 @dataclass
 class AlsaMicrophone(Microphone):
     device: str = "default"
-    period_size: int = 960  # Optimaal voor RNNoise (2 frames van 480)
+    period_size: int = 1024
     timeout: float = 5.0
     multiplier: float = 1.0
     audio_retries: int = 0
     audio_retry_delay: float = 0.0
+    preprocess_cpu_core: int = 2
     _thread: Optional[Thread] = None
-    _worker_process: Optional[Process] = None
+    _preprocess_process: Optional[Process] = None
+    _queue: "Queue[Optional[bytes]]" = field(default_factory=Queue)
     _is_running: bool = False
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self._prev_sample = 0.0
         self.sample_width = 2
         self.sample_channels = 1
-        self.sample_rate = 16000
         self.input_sample_rate = 16000
-        
-        # Queues voor communicatie tussen processen
-        self._input_queue = MPQueue()  # Van Mic naar Denoiser
-        self._output_queue = Queue()   # Van Denoiser naar Listener (Queue.get)
+        self.sample_rate = 16000
+        self._remainder = np.array([], dtype=np.float32)
+
+        self._queue = Queue()
+        self._preprocess_input_queue = MPQueue()
+        self._preprocess_output_queue = MPQueue()
 
     def start(self):
         assert self._thread is None, "Already started"
+        assert self._preprocess_process is None, "Preprocess process already started"
+
         self._is_running = True
-        
-        # 1. Start de Denoiser Worker in een apart PROCES (andere CPU kern)
-        self._worker_process = Process(target=self._denoise_worker, daemon=True)
-        self._worker_process.start()
-        
-        # 2. Start de Microphone Reader in een aparte THREAD
+
+        self._preprocess_process = Process(
+            target=_preprocess_worker,
+            args=(
+                self._preprocess_input_queue,
+                self._preprocess_output_queue,
+                self.sample_rate,
+                self.preprocess_cpu_core,
+            ),
+            daemon=True,
+        )
+        self._preprocess_process.start()
+
         self._thread = Thread(target=self._run, daemon=True)
         self._thread.start()
 
     def read_chunk(self) -> Optional[bytes]:
+        assert self._is_running, "Not running"
         try:
-            return self._output_queue.get(timeout=self.timeout)
-        except:
-            return None
-
-    def _denoise_worker(self):
-        """ Draait op een aparte CPU kern. """
-        LOG.info("RNNoise worker process gestart.")
-        # Initialiseer RNNoise binnen het proces
-        denoiser = RNNoise(sample_rate=16000)
-        
-        while self._is_running:
-            try:
-                chunk_bytes = self._input_queue.get(timeout=1.0)
-                if chunk_bytes is None:
-                    break
-                
-                # Preprocessing
-                audio = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-                audio_input = audio.reshape(1, -1)
-                
-                denoised_chunks = []
-                for vad, frame in denoiser.denoise_chunk(audio_input):
-                    # Terugschalen naar int16 bereik en flatten naar 1D
-                    denoised_chunks.append((frame.flatten() * 32768.0))
-                
-                if denoised_chunks:
-                    combined = np.concatenate(denoised_chunks)
-                    # Clipping om overflow te voorkomen
-                    final_bytes = np.clip(combined, -32768, 32767).astype(np.int16).tobytes()
-                    self._output_queue.put(final_bytes)
-                    
-            except Exception:
-                continue
-
-    def _run(self):
-        """ Microfoon reader thread. """
-        try:
-            mic = alsaaudio.PCM(
-                type=alsaaudio.PCM_CAPTURE,
-                rate=self.input_sample_rate,
-                channels=self.sample_channels,
-                format=alsaaudio.PCM_FORMAT_S16_LE,
-                device=self.device,
-                periodsize=self.period_size
-            )
-            
-            full_chunk = bytes()
-            
-            while self._is_running:
-                length, mic_chunk = mic.read()
-                
-                if length > 0:
-                    # Pas multiplier toe (indien nodig) op ruwe data
-                    if self.multiplier != 1.0:
-                        mic_chunk = audioop.mul(mic_chunk, 2, self.multiplier)
-                    
-                    # Stuur naar de worker process via de input queue
-                    self._input_queue.put(mic_chunk)
-                    
-                time.sleep(0) # Yield naar andere threads
-                
+            return self._queue.get(timeout=self.timeout)
         except Exception:
-            LOG.exception("Fout in ALSA reader thread")
-        finally:
-            mic.close()
+            return None
 
     def stop(self):
         self._is_running = False
-        self._input_queue.put(None) # Stop de worker
-        if self._worker_process:
-            self._worker_process.join()
-        if self._thread:
+
+        while not self._queue.empty():
+            self._queue.get()
+
+        self._queue.put_nowait(None)
+
+        try:
+            self._preprocess_input_queue.put(None)
+        except Exception:
+            pass
+
+        if self._thread is not None:
             self._thread.join()
+            self._thread = None
+
+        if self._preprocess_process is not None:
+            self._preprocess_process.join(timeout=2)
+            if self._preprocess_process.is_alive():
+                self._preprocess_process.terminate()
+                self._preprocess_process.join()
+            self._preprocess_process = None
+
+    def _run(self):
+        debug_file_path = "/tmp/debug_mic.wav"
+        debug_file = wave.open(debug_file_path, "wb")
+        debug_file.setnchannels(self.sample_channels)
+        debug_file.setsampwidth(self.sample_width)
+        debug_file.setframerate(self.sample_rate)
+
+        try:
+            assert self.sample_width in {2, 4}, (
+                "Only 16-bit and 32-bit sample widths are supported"
+            )
+
+            for _ in range(self.audio_retries + 1):
+                try:
+                    LOG.debug(
+                        "Opening microphone (device=%s, rate=%s, width=%s, channels=%s)",
+                        self.device,
+                        self.sample_rate,
+                        self.sample_width,
+                        self.sample_channels,
+                    )
+
+                    mic = alsaaudio.PCM(
+                        type=alsaaudio.PCM_CAPTURE,
+                        rate=self.input_sample_rate,
+                        channels=self.sample_channels,
+                        format=alsaaudio.PCM_FORMAT_S16_LE,
+                        device=self.device,
+                        periodsize=960,
+                    )
+
+                    try:
+                        full_chunk = bytes()
+
+                        debug_buffer = bytearray()
+
+                        bytes_per_second = (
+                            self.sample_rate *
+                            self.sample_width *
+                            self.sample_channels
+                        )
+
+                        max_buffer_size = bytes_per_second * 15
+                        debug_saved = False
+
+                        while self._is_running:
+                            mic_chunk_length, mic_chunk = mic.read()
+
+                            if mic_chunk_length <= 0:
+                                LOG.warning("Bad chunk length: %s", mic_chunk_length)
+                                continue
+
+                            self._preprocess_input_queue.put(mic_chunk)
+
+                            try:
+                                mic_chunk = self._preprocess_output_queue.get(
+                                    timeout=self.timeout
+                                )
+                            except Empty:
+                                LOG.warning("Timed out waiting for preprocessed audio")
+                                continue
+                            except Exception:
+                                LOG.exception(
+                                    "Failed to receive preprocessed audio"
+                                )
+                                continue
+
+                            if mic_chunk is None:
+                                continue
+
+                            if self.multiplier != 1.0:
+                                mic_chunk = audioop.mul(
+                                    mic_chunk, 2, self.multiplier
+                                )
+
+                            if not debug_saved:
+                                debug_buffer.extend(mic_chunk)
+
+                                if len(debug_buffer) >= max_buffer_size:
+                                    debug_file.writeframes(bytes(debug_buffer))
+                                    LOG.info(
+                                        "Debug opname van 10 seconden opgeslagen: %s",
+                                        debug_file_path
+                                    )
+                                    debug_saved = True
+                                    debug_buffer.clear()
+
+                            full_chunk += mic_chunk
+                            while len(full_chunk) >= self.chunk_size:
+                                self._queue.put_nowait(full_chunk[: self.chunk_size])
+                                full_chunk = full_chunk[self.chunk_size:]
+
+                            time.sleep(0.001)
+                    finally:
+                        debug_file.close()
+                        LOG.info(
+                            "Debug opname opgeslagen in %s",
+                            debug_file_path
+                        )
+                        mic.close()
+                except Exception:
+                    LOG.exception("Failed to open microphone")
+                    time.sleep(0.001)
+        except Exception:
+            LOG.exception("Unexpected error in ALSA microphone thread")
