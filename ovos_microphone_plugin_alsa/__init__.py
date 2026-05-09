@@ -122,12 +122,7 @@ class AlsaMicrophone(Microphone):
         debug_file.setnchannels(self.sample_channels)  # used to write data to file fo testing audio quality
         debug_file.setsampwidth(self.sample_width)  # used to write data to file fo testing audio quality
         debug_file.setframerate(self.sample_rate)  # used to write data to file fo testing audio quality
-        
-        # -----------------------------------------
-        # RNNoise instance
-        # -----------------------------------------
-        #self.denoiser = RNNoise(self.input_sample_rate)
-        
+       
         try:
             assert self.sample_width in {
                 2,
@@ -157,6 +152,21 @@ class AlsaMicrophone(Microphone):
                     try:
                         full_chunk = bytes()
 
+                        # -----------------------------------------
+                        # Eenmalige debug-buffer van 10 seconden
+                        # -----------------------------------------
+                        debug_buffer = bytearray()
+                        
+                        bytes_per_second = (
+                            self.sample_rate *
+                            self.sample_width *
+                            self.sample_channels
+                        )
+                        
+                        max_buffer_size = bytes_per_second * 10  # 10 seconden audio
+                        
+                        debug_saved = False
+                        
                         while self._is_running:
                             mic_chunk_length, mic_chunk = mic.read()
 
@@ -178,7 +188,27 @@ class AlsaMicrophone(Microphone):
                                 )                           
 
                             # Schrijf de bewerkte bytes weg naar het debug-bestand
-                            debug_file.writeframes(mic_chunk)  # used to write data to file fo testing audio quality
+                            #debug_file.writeframes(mic_chunk)  # used to write data to file fo testing audio quality
+                            # Verzamel exact 10 seconden audio
+                            if not debug_saved:
+                            
+                                debug_buffer.extend(mic_chunk)
+                            
+                                # Zodra buffer 10 seconden bevat
+                                if len(debug_buffer) >= max_buffer_size:
+                            
+                                    debug_file.writeframes(bytes(debug_buffer))
+                                    debug_file.flush()
+                            
+                                    LOG.info(
+                                        "Debug opname van 10 seconden opgeslagen: %s",
+                                        debug_file_path
+                                    )
+                            
+                                    debug_saved = True
+                            
+                                    # buffer leegmaken
+                                    debug_buffer.clear()
                            
                             full_chunk += mic_chunk
                             while len(full_chunk) >= self.chunk_size:
