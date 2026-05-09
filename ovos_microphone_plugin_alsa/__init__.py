@@ -115,8 +115,6 @@ class AlsaMicrophone(Microphone):
                             if mic_chunk_length <= 0:
                                 LOG.warning("Bad chunk length: %s", mic_chunk_length)
                                 continue
-                            LOG.info ("Chunk length: %s", mic_chunk_length)    
-                            LOG.info(f"Chunk bytes: {len(mic_chunk)}")
                             
                             # >>> PLAATS DEZE REGEL DIRECT NA mic.read()
                             mic_chunk = self._preprocess_audio(mic_chunk)
@@ -135,7 +133,6 @@ class AlsaMicrophone(Microphone):
                                 self._queue.put_nowait(full_chunk[: self.chunk_size])
                                 full_chunk = full_chunk[self.chunk_size:]
 
-                            time.sleep(0.0)
                     finally:
                         debug_file.close()  # used to write data to file fo testing audio quality
                         LOG.info(f"Debug opname opgeslagen in {debug_file_path}")   # used to write data to file fo testing audio quality
