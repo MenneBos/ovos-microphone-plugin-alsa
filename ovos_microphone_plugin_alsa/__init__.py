@@ -104,10 +104,9 @@ class AlsaMicrophone(Microphone):
                 denoised_chunks.append(denoised_frame.flatten()) # zet om van [1.480] naar [480]
     
         # flatten chunks
-        #denoised_audio = np.concatenate(denoised_chunks)
+        denoised_audio = np.concatenate(denoised_chunks).astype(np.int16).tobytes()
         #final_bytes = np.clip(denoised_audio, -32768, 32767).astype(np.int16).tobytes() # dit clipt met *32768.0
-        return denoised_audio = np.concatenate(denoised_chunks).astype(np.int16).tobytes()
-
+        return denoised_audio
 
     def stop(self):
         self._is_running = False
