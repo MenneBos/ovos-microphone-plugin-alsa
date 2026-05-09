@@ -44,7 +44,7 @@ class AlsaMicrophone(Microphone):
         super().__init__(*args, **kwargs)
         self.denoiser = RNNoise(sample_rate=16000)
         self._prev_sample = 0.0  # Voor high-pass context
-        self.multiplier: float = 7.0
+        self.multiplier: float = 3.0
         self.sample_width = 2
         self.sample_channels = 1
         self.input_sample_rate = 16000
@@ -53,7 +53,7 @@ class AlsaMicrophone(Microphone):
         self._queue = Queue()
 
         # Nieuw: meerdere mic chunks verzamelen vóór preprocessing
-        self.preprocess_buffer_chunks = 1
+        self.preprocess_buffer_chunks = 2
 
     def start(self):
         assert self._thread is None, "Already started"
