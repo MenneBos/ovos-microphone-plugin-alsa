@@ -81,7 +81,7 @@ class AlsaMicrophone(Microphone):
         #audio = np.diff(audio, prepend=self._prev_sample) * 0.97
         #self._prev_sample = float(audio[-1])
     
-        audio = audio.astype(np.int16)
+        #audio = audio.astype(np.int16)
 
         audio = np.expand_dims(audio, axis=0)  # (1, N)
     
