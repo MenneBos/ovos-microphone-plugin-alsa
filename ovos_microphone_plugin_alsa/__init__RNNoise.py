@@ -71,9 +71,9 @@ def _preprocess_worker(input_queue, output_queue, sample_rate, cpu_core):
                 else:
                     denoised_audio = b""
                 
-                target_len = len(denoised_audio)
-                original_signal = audio[:target_len]
-                denoised_audio = (0.5 * denoised_audio) + (0.5 * audio[:len(original_signal)])
+                #target_len = len(denoised_audio)
+                #original_signal = audio[:target_len]
+                #denoised_audio = (0.5 * denoised_audio) + (0.5 * audio[:len(original_signal)])
                 
                 output_queue.put(denoised_audio)
                 
