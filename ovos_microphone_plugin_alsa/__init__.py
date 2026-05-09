@@ -33,7 +33,7 @@ class AlsaMicrophone(Microphone):
     device: str = "default"
     period_size: int = 1024
     timeout: float = 5.0
-    multiplier: float = 1.0
+
     audio_retries: int = 0
     audio_retry_delay: float = 0.0
     _thread: Optional[Thread] = None
@@ -44,6 +44,7 @@ class AlsaMicrophone(Microphone):
         super().__init__(*args, **kwargs)
         self.denoiser = RNNoise(sample_rate=16000)
         self._prev_sample = 0.0  # Voor high-pass context
+        multiplier: float = 3.0
         self.sample_width = 2
         self.sample_channels = 1
         self.input_sample_rate = 16000
@@ -52,7 +53,7 @@ class AlsaMicrophone(Microphone):
         self._queue = Queue()
 
         # Nieuw: meerdere mic chunks verzamelen vóór preprocessing
-        self.preprocess_buffer_chunks = 2
+        self.preprocess_buffer_chunks = 1
 
     def start(self):
         assert self._thread is None, "Already started"
@@ -154,6 +155,12 @@ class AlsaMicrophone(Microphone):
                                 LOG.warning("Bad chunk length: %s", mic_chunk_length)
                                 continue
 
+                            # Increase loudness of audio
+                            if self.multiplier != 1.0:
+                                mic_chunk = audioop.mul(
+                                    mic_chunk, 2, self.multiplier
+                                )
+                            
                             preprocess_buffer.extend(mic_chunk)
 
                             if len(preprocess_buffer) < target_preprocess_bytes:
@@ -167,11 +174,7 @@ class AlsaMicrophone(Microphone):
                             if mic_chunk is None:
                                 continue
 
-                            # Increase loudness of audio
-                            if self.multiplier != 1.0:
-                                mic_chunk = audioop.mul(
-                                    mic_chunk, 2, self.multiplier
-                                )
+
 
                             # Verzamel exact 10 seconden audio
                             if not debug_saved:
