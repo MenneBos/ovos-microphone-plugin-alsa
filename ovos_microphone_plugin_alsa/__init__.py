@@ -52,7 +52,7 @@ class AlsaMicrophone(Microphone):
         self._queue = Queue()
 
         # Nieuw: meerdere mic chunks verzamelen vóór preprocessing
-        self.preprocess_buffer_chunks = 3
+        self.preprocess_buffer_chunks = 2
 
     def start(self):
         assert self._thread is None, "Already started"
@@ -192,7 +192,7 @@ class AlsaMicrophone(Microphone):
                             full_chunk += mic_chunk
                             while len(full_chunk) >= self.chunk_size:
                                 self._queue.put_nowait(full_chunk[: self.chunk_size])
-                                full_chunk = full_chunk[self.chunk_size:
+                                full_chunk = full_chunk[self.chunk_size:]
                                 
                     finally:
                         debug_file.close()  # used to write data to file fo testing audio quality
