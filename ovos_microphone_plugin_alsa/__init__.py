@@ -44,7 +44,7 @@ class AlsaMicrophone(Microphone):
         super().__init__(*args, **kwargs)
         self.denoiser = RNNoise(sample_rate=16000)
         self._prev_sample = 0.0  # Voor high-pass context
-        multiplier: float = 3.0
+        self.multiplier: float = 7.0
         self.sample_width = 2
         self.sample_channels = 1
         self.input_sample_rate = 16000
