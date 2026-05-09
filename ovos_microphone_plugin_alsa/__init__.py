@@ -60,10 +60,11 @@ def _preprocess_worker(input_queue, output_queue, sample_rate, cpu_core):
                 for speech_prob, denoised_frame in denoiser.denoise_chunk(audio):
                     if denoised_frame.ndim > 1:
                         denoised_chunks.append(denoised_frame.flatten())
-
+                    mixed = (0.5 * denoised_chunks) + (0.5 * audio[:len(denoised_chunks)])
+               
                 if denoised_chunks:
                     denoised_audio = (
-                        np.concatenate(denoised_chunks)
+                        np.concatenate(mixed)
                         .astype(np.int16)
                         .tobytes()
                     )
