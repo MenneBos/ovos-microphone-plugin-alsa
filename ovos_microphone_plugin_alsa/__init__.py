@@ -90,7 +90,7 @@ class AlsaMicrophone(Microphone):
         denoised_output = []
     
         for speech_prob, denoised_audio in self.denoiser.denoise_chunk(audio):
-            LOG.debug(f"Speech probability: {speech_prob}")
+            #LOG.debug(f"Speech probability: {speech_prob}")
             denoised_output.append(denoised_audio)
             # normalize to 1D
             #if denoised_audio.ndim == 2:
