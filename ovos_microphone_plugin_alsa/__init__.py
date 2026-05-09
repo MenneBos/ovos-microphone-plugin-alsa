@@ -60,7 +60,7 @@ def _preprocess_worker(input_queue, output_queue, sample_rate, cpu_core):
                 for speech_prob, denoised_frame in denoiser.denoise_chunk(audio):
                     if denoised_frame.ndim > 1:
                         denoised_chunks.append(denoised_frame.flatten())
-                    mixed = (0.5 * denoised_chunks) + (0.5 * audio[:len(denoised_chunks)])
+
                
                 if denoised_chunks:
                     denoised_audio = (
@@ -70,8 +70,13 @@ def _preprocess_worker(input_queue, output_queue, sample_rate, cpu_core):
                     )
                 else:
                     denoised_audio = b""
-
-                output_queue.put(denoised_audio)
+                
+                target_len = len(denoised_audio)
+                original_signal = audio[:target_len]
+                mixed = (0.5 * denoised_audio) + (0.5 * audio[:len(original_signal)])
+                
+                output_queue.put(mixed)
+                
             except Exception:
                 LOG.exception("Failed to preprocess audio")
                 output_queue.put(None)
