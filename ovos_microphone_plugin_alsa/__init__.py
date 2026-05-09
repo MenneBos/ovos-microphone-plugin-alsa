@@ -108,7 +108,7 @@ class AlsaMicrophone(Microphone):
 
                     try:
                         full_chunk = bytes()
-                        LOG.info(f"PCM dump: {mic.dumpinfo()}")
+                        #LOG.info(f"PCM dump: {mic.dumpinfo()}")
 
                         while self._is_running:
                             mic_chunk_length, mic_chunk = mic.read()
