@@ -65,7 +65,7 @@ class AlsaMicrophone(Microphone):
             return None
 
     def _preprocess_audio(self, chunk_bytes):
-        audio_data = np.frombuffer(chunk_bytes, dtype=np.int16)
+        #audio_data = np.frombuffer(chunk_bytes, dtype=np.int16)
     
         #audio = audio_data.astype(np.float32)
     
@@ -82,6 +82,7 @@ class AlsaMicrophone(Microphone):
         #self._prev_sample = float(audio[-1])
     
         #audio = audio.astype(np.int16)
+        audio = np.frombuffer(chunk_bytes, dtype=np.int16)
         audio = np.expand_dims(audio, axis=0)  # (1, N)
     
         # ============================
