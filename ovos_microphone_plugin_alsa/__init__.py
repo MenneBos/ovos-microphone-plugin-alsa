@@ -95,17 +95,18 @@ class AlsaMicrophone(Microphone):
     
         for speech_prob, denoised_frame in self.denoiser.denoise_chunk(audio):
             #LOG.debug(f"Speech probability: {speech_prob}")
-            denoised_frame = (denoised_frame * 32768.0) # output is float32 tussen 1 en -1
+            #denoised_frame = (denoised_frame * 32768.0) # output is float32 tussen 1 en -1
             # normalize to 1D
             #if denoised_audio.ndim == 2:
             #    denoised_audio = denoised_audio[0]
 
-            denoised_chunks.append(denoised_frame.flatten()) # zet om van [1.480] naar [480]
+            if denoised_frame.ndim > 1:
+                denoised_chunks.append(denoised_frame.flatten()) # zet om van [1.480] naar [480]
     
         # flatten chunks
-        denoised_audio = np.concatenate(denoised_chunks)
-        final_bytes = np.clip(denoised_audio, -32768, 32767).astype(np.int16).tobytes()
-        return final_bytes
+        #denoised_audio = np.concatenate(denoised_chunks)
+        #final_bytes = np.clip(denoised_audio, -32768, 32767).astype(np.int16).tobytes() # dit clipt met *32768.0
+        return denoised_audio = np.concatenate(denoised_chunks).astype(np.int16).tobytes()
 
 
     def stop(self):
