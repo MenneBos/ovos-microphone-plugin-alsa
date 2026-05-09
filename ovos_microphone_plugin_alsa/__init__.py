@@ -65,10 +65,10 @@ class AlsaMicrophone(Microphone):
             return None
 
     def _preprocess_audio(self, chunk_bytes):
-        audio = np.frombuffer(chunk_bytes, dtype=np.int16)
+        #audio = np.frombuffer(chunk_bytes, dtype=np.int16)
         #audio = np.frombuffer(chunk_bytes, dtype=np.float32) / 32768.0
 
-        audio = audio.astype(np.float32) / 32768.0
+        #audio = audio.astype(np.float32) / 32768.0
     
         # DC removal
         #audio -= np.mean(audio)
@@ -83,29 +83,29 @@ class AlsaMicrophone(Microphone):
         #self._prev_sample = float(audio[-1])
     
         #audio = audio.astype(np.int16)
-
-        audio = np.expand_dims(audio, axis=0)  # (1, N)
+        audio = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+        #audio = np.expand_dims(audio, axis=0)  # (1, N)
+        # 2. Naar [1, N]
+        audio = audio.reshape(1, -1)
     
         # ============================
         # denoised streaming chunk API
         # ============================
-        denoised_output = []
+        denoised_chunks = []
     
-        for speech_prob, denoised_audio in self.denoiser.denoise_chunk(audio):
+        for speech_prob, denoised_frame in self.denoiser.denoise_chunk(audio):
             #LOG.debug(f"Speech probability: {speech_prob}")
-            denoised_output.append(denoised_audio)
+            denoised_frame = (denoised_frame * 32768.0) # output is float32 tussen 1 en -1
             # normalize to 1D
             #if denoised_audio.ndim == 2:
             #    denoised_audio = denoised_audio[0]
 
-    
-        if not denoised_output:
-            return b""
+            denoised_chunks.append(denoised_frame.flatten()) # zet om van [1.480] naar [480]
     
         # flatten chunks
-        #denoised_audio = np.concatenate(denoised_output)
-    
-        return denoised_audio.astype(np.int16).tobytes()
+        denoised_audio = np.concatenate(denoised_chunks)
+        final_bytes = np.clip(denoised_audio, -32768, 32767).astype(np.int16).tobytes()
+        return final_bytes
 
 
     def stop(self):
@@ -147,7 +147,7 @@ class AlsaMicrophone(Microphone):
                         channels=self.sample_channels,
                         format=alsaaudio.PCM_FORMAT_S16_LE,
                         device=self.device,
-                        periodsize=160,
+                        periodsize=960,
                     )
 
 
