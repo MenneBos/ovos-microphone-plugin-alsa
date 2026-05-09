@@ -91,6 +91,11 @@ class AlsaMicrophone(Microphone):
     
         for denoised_audio in self.denoiser.denoise_chunk(audio):
             denoised_output.append(denoised_audio)
+            # normalize to 1D
+            #if denoised_audio.ndim == 2:
+            #    denoised_audio = denoised_audio[0]
+
+            denoised_output.append(denoised_audio)
     
         if not denoised_output:
             return b""
