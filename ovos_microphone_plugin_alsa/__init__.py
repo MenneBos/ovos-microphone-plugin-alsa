@@ -65,9 +65,9 @@ class AlsaMicrophone(Microphone):
             return None
 
     def _preprocess_audio(self, chunk_bytes):
-        #audio_data = np.frombuffer(chunk_bytes, dtype=np.int16)
+        audio_data = np.frombuffer(chunk_bytes, dtype=np.int16)
     
-        #audio = audio_data.astype(np.float32)
+        audio = audio_data.astype(np.float32)
     
         # DC removal
         #audio -= np.mean(audio)
@@ -81,8 +81,8 @@ class AlsaMicrophone(Microphone):
         #audio = np.diff(audio, prepend=self._prev_sample) * 0.97
         #self._prev_sample = float(audio[-1])
     
-        #audio = audio.astype(np.int16)
-        audio = np.frombuffer(chunk_bytes, dtype=np.int16)
+        audio = audio.astype(np.int16)
+
         audio = np.expand_dims(audio, axis=0)  # (1, N)
     
         # ============================
@@ -164,7 +164,7 @@ class AlsaMicrophone(Microphone):
                             self.sample_channels
                         )
                         
-                        max_buffer_size = bytes_per_second * 20  # 10 seconden audio
+                        max_buffer_size = bytes_per_second * 15  # 10 seconden audio
                         
                         debug_saved = False
                         
@@ -199,7 +199,7 @@ class AlsaMicrophone(Microphone):
                                 if len(debug_buffer) >= max_buffer_size:
                             
                                     debug_file.writeframes(bytes(debug_buffer))
-                                    debug_file.flush()
+                                    #debug_file.flush()
                             
                                     LOG.info(
                                         "Debug opname van 10 seconden opgeslagen: %s",
