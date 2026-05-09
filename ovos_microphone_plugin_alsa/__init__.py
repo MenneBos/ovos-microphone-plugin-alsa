@@ -89,7 +89,7 @@ class AlsaMicrophone(Microphone):
         # ============================
         # denoised streaming chunk API
         # ============================
-        #denoised_output = []
+        denoised_output = []
     
         for speech_prob, denoised_audio in self.denoiser.denoise_chunk(audio):
             #LOG.debug(f"Speech probability: {speech_prob}")
