@@ -29,7 +29,7 @@ from ovos_utils.log import LOG
 
 @dataclass
 class AlsaMicrophone(Microphone):
-    device: str = "default"
+    device: str = "pulse"
     period_size: int = 1024
     timeout: float = 5.0
     multiplier: float = 1.0
