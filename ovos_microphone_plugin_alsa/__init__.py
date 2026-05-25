@@ -57,7 +57,7 @@ class AlsaMicrophone(Microphone):
         # DC removal
         audio -= np.mean(audio)
         # snelle high-pass (vectorized)
-        audio = np.diff(audio, prepend=audio[0]) * 0.97
+        #audio = np.diff(audio, prepend=audio[0]) * 0.97
         # clamp
         audio = np.clip(audio, -32768, 32767).astype(np.int16)
         return audio.tobytes()
