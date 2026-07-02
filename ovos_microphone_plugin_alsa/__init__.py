@@ -52,15 +52,21 @@ class AlsaMicrophone(Microphone):
         except: # let the listener handle this, and maybe restart the plugin
             return None
 
-    def _preprocess_audio(self, chunk_bytes):
-        audio = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32)
+    def _convert_s32le_to_s16le(self, chunk_bytes: bytes) -> bytes:
+        """Convert little-endian signed 32-bit PCM to signed 16-bit PCM."""
+        audio_32 = np.frombuffer(chunk_bytes, dtype=np.int32)
+        audio_16 = (audio_32 >> 16).astype(np.int16)
+        return audio_16.tobytes()
+    
+#    def _preprocess_audio(self, chunk_bytes):
+#        audio = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32)
         # DC removal
-        audio -= np.mean(audio)
+#        audio -= np.mean(audio)
         # snelle high-pass (vectorized)
         #audio = np.diff(audio, prepend=audio[0]) * 0.97
         # clamp
-        audio = np.clip(audio, -32768, 32767).astype(np.int16)
-        return audio.tobytes()
+#        audio = np.clip(audio, -32768, 32767).astype(np.int16)
+#        return audio.tobytes()
 
     def stop(self):
         self._is_running = False
