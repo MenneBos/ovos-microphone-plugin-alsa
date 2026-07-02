@@ -58,15 +58,15 @@ class AlsaMicrophone(Microphone):
         audio_16 = (audio_32 >> 16).astype(np.int16)
         return audio_16.tobytes()
     
-#    def _preprocess_audio(self, chunk_bytes):
-#        audio = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32)
+    def _preprocess_audio(self, chunk_bytes):
+        audio = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32)
         # DC removal
-#        audio -= np.mean(audio)
+        audio -= np.mean(audio)
         # snelle high-pass (vectorized)
         #audio = np.diff(audio, prepend=audio[0]) * 0.97
         # clamp
-#        audio = np.clip(audio, -32768, 32767).astype(np.int16)
-#        return audio.tobytes()
+        audio = np.clip(audio, -32768, 32767).astype(np.int16)
+        return audio.tobytes()
 
     def stop(self):
         self._is_running = False
@@ -121,15 +121,19 @@ class AlsaMicrophone(Microphone):
                             if mic_chunk_length <= 0:
                                 LOG.warning("Bad chunk length: %s", mic_chunk_length)
                                 continue
-                            
-                            # >>> PLAATS DEZE REGEL DIRECT NA mic.read()
-                            mic_chunk = self._preprocess_audio(mic_chunk)
-                            
-                            # Increase loudness of audio
-                            if self.multiplier != 1.0:
-                                mic_chunk = audioop.mul(
-                                    mic_chunk, self.sample_width, self.multiplier
-                                )
+
+                            # Convert incoming S32_LE to S16_LE first
+                            if self.sample_width == 4:
+                                mic_chunk = self._convert_s32le_to_s16le(mic_chunk)
+
+                            #mic_chunk = self._preprocess_audio(mic_chunk)
+
+                            # Increase loudness of audio (stream is S16_LE after conversion/preprocess)
+                            effective_width = 2
+                             if self.multiplier != 1.0:
+                                 mic_chunk = audioop.mul(
+                                    mic_chunk, effective_width, self.multiplier
+                                 )
                                                         
                             # Schrijf de bewerkte bytes weg naar het debug-bestand
                             #debug_file.writeframes(mic_chunk)  # used to write data to file fo testing audio quality
